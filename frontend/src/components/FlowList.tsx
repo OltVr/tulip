@@ -4,7 +4,7 @@ import {
   useParams,
   useNavigate,
 } from "react-router-dom";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useHotkeys } from 'react-hotkeys-hook';
 import { FetchBaseQueryError } from '@reduxjs/toolkit/query'
 import { Flow } from "../types";
@@ -108,14 +108,26 @@ export function FlowList() {
   else if(startedTimeStamp && fulfilledTimeStamp)
     searchMessage = `Search took ${fulfilledTimeStamp - startedTimeStamp}ms`
 
-  // TODO: fix the below transformation - move it to server
-  // Diederik gives you a beer once it has been fixed
-  const transformedFlowData = flowData?.map((flow) => ({
-    ...flow,
-    service_tag:
-      services?.find((s) => s.ip === flow.dst_ip && s.port === flow.dst_port)
-        ?.name ?? "unknown",
-  }));
+  const servicesByEndpoint = useMemo(
+    () => new Map(
+      (services ?? []).map((service) => [
+        `${service.ip}:${service.port}`,
+        service.name,
+      ])
+    ),
+    [services]
+  );
+
+  // The query returns up to 1000 flows. Build the service lookup once instead
+  // of scanning the full service list for every flow on every render.
+  const transformedFlowData = useMemo(
+    () => flowData?.map((flow) => ({
+      ...flow,
+      service_tag:
+        servicesByEndpoint.get(`${flow.dst_ip}:${flow.dst_port}`) ?? "unknown",
+    })),
+    [flowData, servicesByEndpoint]
+  );
 
   const onHeartHandler = async (flow: Flow) => {
     await starFlow({ id: flow.id, star: !flow.tags.includes("starred") });
@@ -216,10 +228,12 @@ export function FlowList() {
   return (
     <div className="flex flex-col h-full">
       <div className="bg-white border-b-gray-300 border-b shadow-md flex flex-col">
-        <div className="p-2 flex" style={{ height: 50 }}>
+        <div className="p-2 flex items-center" style={{ height: 50 }}>
           <button
-            className="flex gap-1 items-center text-sm"
+            aria-expanded={showFilters}
+            className="rose-button-ghost"
             onClick={() => setShowFilters(!showFilters)}
+            type="button"
           >
             {<FilterIcon height={20} className="text-gray-400"></FilterIcon>}
             {showFilters ? "Close" : "Open"} filters
@@ -259,7 +273,11 @@ export function FlowList() {
         )}
       </div>
       <div></div>
-      { searchMessage && <div>{searchMessage}</div> }
+      {searchMessage && (
+        <div className={`border-b px-3 py-1.5 text-xs ${flowQueryErrorMessage ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+          {searchMessage}
+        </div>
+      )}
       <Virtuoso
         className={classNames({
           "flex-1": true,
@@ -270,20 +288,14 @@ export function FlowList() {
         ref={virtuoso}
         initialTopMostItemIndex={flowIndex}
         itemContent={(index, flow) => (
-          <Link
-            to={`/flow/${flow.id}?${searchParams}`}
-            onClick={() => setFlowIndex(index)}
+          <FlowListEntry
+            flow={flow}
+            href={`/flow/${flow.id}?${searchParams}`}
+            isActive={flow.id === openedFlowID}
             key={flow.id}
-            className="focus-visible:rounded-md"
-            //style={{ paddingTop: '1em' }}
-          >
-            <FlowListEntry
-              key={flow.id}
-              flow={flow}
-              isActive={flow.id === openedFlowID}
-              onHeartClick={onHeartHandler}
-            />
-          </Link>
+            onHeartClick={onHeartHandler}
+            onSelect={() => setFlowIndex(index)}
+          />
         )}
       />
     </div>
@@ -292,11 +304,13 @@ export function FlowList() {
 
 interface FlowListEntryProps {
   flow: Flow;
+  href?: string;
   isActive: boolean;
   onHeartClick: (flow: Flow) => void;
+  onSelect?: () => void;
 }
 
-function FlowListEntry({ flow, isActive, onHeartClick }: FlowListEntryProps) {
+function FlowListEntry({ flow, href, isActive, onHeartClick, onSelect }: FlowListEntryProps) {
   const formatted_time_h_m_s = format(new Date(flow.time), "HH:mm:ss");
   const formatted_time_ms = format(new Date(flow.time), ".SSS");
 
@@ -318,46 +332,57 @@ function FlowListEntry({ flow, isActive, onHeartClick }: FlowListEntryProps) {
       })}
     >
       <div className="flex">
-        <div
-          className="w-5 ml-1 mr-1 self-center shrink-0"
-          onClick={() => {
+        <button
+          aria-label={isStarred ? "Remove star" : "Star flow"}
+          className="ml-1 mr-1 w-7 shrink-0 self-center rounded-md p-1 text-slate-500 hover:bg-white hover:text-rose-600 focus-visible:ring-2 focus-visible:ring-rose-500"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
             setStarred(!isStarred);
             onHeartClick(flow);
           }}
+          title={isStarred ? "Remove star (X)" : "Star flow (X)"}
+          type="button"
         >
           {isStarred ? (
             <HeartIcon className="text-red-500" />
           ) : (
             <EmptyHeartIcon />
           )}
-        </div>
+        </button>
 
-        <div className="w-5 mr-2 self-center shrink-0">
-          {flow.child_id != null || flow.parent_id != null ? (
-            <LinkIcon className="text-blue-500" />
-          ) : undefined}
-        </div>
-        <div className="flex-1 shrink">
-          <div className="flex">
-            <div className="shrink-0">
-              <span className="text-gray-700 font-bold overflow-ellipsis overflow-hidden ">
-                {flow.service_tag}
-              </span>
-              <span className="text-gray-500">:{flow.dst_port}</span>
-            </div>
+        <Link
+          className="flex min-w-0 flex-1 rounded-md focus-visible:ring-2 focus-visible:ring-rose-500"
+          onClick={onSelect}
+          to={href ?? `/flow/${flow.id}`}
+        >
+          <div className="w-5 mr-2 self-center shrink-0">
+            {flow.child_id != null || flow.parent_id != null ? (
+              <LinkIcon className="text-blue-500" />
+            ) : undefined}
+          </div>
+          <div className="flex-1 shrink">
+            <div className="flex">
+              <div className="shrink-0">
+                <span className="text-gray-700 font-bold overflow-ellipsis overflow-hidden ">
+                  {flow.service_tag}
+                </span>
+                <span className="text-gray-500">:{flow.dst_port}</span>
+              </div>
 
-            <div className="ml-2">
-              <span className="text-gray-500">{formatted_time_h_m_s}</span>
-              <span className="text-gray-300">{formatted_time_ms}</span>
+              <div className="ml-2">
+                <span className="text-gray-500">{formatted_time_h_m_s}</span>
+                <span className="text-gray-300">{formatted_time_ms}</span>
+              </div>
+              <div className="text-gray-500 ml-auto">{duration}</div>
             </div>
-            <div className="text-gray-500 ml-auto">{duration}</div>
+            <div className="flex gap-2 flex-wrap">
+              {filtered_tag_list.map((tag) => (
+                <Tag key={tag} tag={tag}></Tag>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {filtered_tag_list.map((tag) => (
-              <Tag key={tag} tag={tag}></Tag>
-            ))}
-          </div>
-        </div>
+        </Link>
       </div>
     </li>
   );

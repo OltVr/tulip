@@ -13,58 +13,22 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-#
-# Flower is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Flower.  If not, see <https://www.gnu.org/licenses/>.
 
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs
-from jinja2 import Environment, BaseLoader
 from io import BytesIO
 import json
+from urllib.parse import parse_qs
 
 from database import FlowDetail
+from ecsc_export import render_ecsc_exploit
+
 
 DISCARD_COOKIES = ["PHPSESSID", "wordpress_logged_in_", "session"]
 
 
-HEADER_TEMPLATE = """import json
-import os
-import sys
-
-import requests
-
-HOST = os.getenv('TARGET_IP')
-EXTRA = json.loads(os.getenv('TARGET_EXTRA', '[]'))
-{% if use_requests_session %}
-s = requests.Session()
-{% endif -%}
-"""
-
-REQUEST_TEMPLATE = """
-{{"s." if use_requests_session}}headers = {{headers}}
-{% if data -%}
-data = {{data}}
-{% endif -%}
-{{"res = " if print_info}}{{"s" if use_requests_session else "requests"}}.{{request_method}}(f"http://{HOST}:{{port}}" + {{request_path_repr}}{% if data %}, {{data_param_name}}=data{% endif %}{{ ", headers=headers" if not use_requests_session}})
-{% if print_info -%}
-print(res.text)
-print(res.status_code, res.headers)
-{% endif %}
-"""
-
-
-def render(template, **kwargs):
-    return Environment(loader=BaseLoader()).from_string(template).render(kwargs)
-
-
-# class to parse request informations
 class HTTPRequest(BaseHTTPRequestHandler):
+    """Small, side-effect-free parser for a captured raw HTTP request."""
+
     def __init__(self, raw_http_request: bytes):
         self.rfile = BytesIO(raw_http_request)
         self.raw_requestline = self.rfile.readline()
@@ -77,7 +41,6 @@ class HTTPRequest(BaseHTTPRequestHandler):
         except AttributeError:
             self.headers = {}
 
-        # Data
         try:
             self.body = raw_http_request.split(b"\r\n\r\n", 1)[1].rstrip()
         except IndexError:
@@ -88,42 +51,35 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.error_message = message
 
 
-def decode_http_request(raw_request: bytes, tokenize):
+def decode_http_request(raw_request: bytes, tokenize: bool):
     request = HTTPRequest(raw_request)
     headers = {}
-    blocked_headers = [
+    blocked_headers = {
         "content-length",
         "accept-encoding",
         "connection",
         "accept",
         "host",
-    ]
+    }
     content_type = ""
     data = None
     data_param_name = None
 
-    for i in request.headers:
-        normalized_header = i.lower()
-
+    for key in request.headers:
+        normalized_header = key.lower()
         if normalized_header == "content-type":
-            content_type = request.headers[i]
-        if not normalized_header in blocked_headers:
-            headers[i] = request.headers[i]
+            content_type = request.headers[key]
+        if normalized_header not in blocked_headers:
+            headers[key] = request.headers[key]
 
-    # if tokenization is enabled and body is not empty, try to decode form body or JSON body
     if tokenize and request.body:
-        # try to deserialize form data
         if content_type.startswith("application/x-www-form-urlencoded"):
             data_param_name = "data"
             data = {}
             body_dict = parse_qs(request.body.decode())
             for key, value in body_dict.items():
-                if len(value) == 1:
-                    data[key] = value[0]
-                else:
-                    data[key] = value
+                data[key] = value[0] if len(value) == 1 else value
 
-        # try to deserialize json
         if content_type.startswith("application/json"):
             data_param_name = "json"
             try:
@@ -131,13 +87,6 @@ def decode_http_request(raw_request: bytes, tokenize):
             except json.decoder.JSONDecodeError:
                 pass
 
-        # Forms with files are not yet implemented
-        # # try to extract files
-        # if content_type.startswith("multipart/form-data"):
-        #     data_param_name = "files"
-        #     data  = ...
-
-        # Fallback to use raw text if nothing else worked out
         if data is None:
             data_param_name = "data"
             data = request.body
@@ -145,80 +94,97 @@ def decode_http_request(raw_request: bytes, tokenize):
     return request, data, data_param_name, headers
 
 
-# tokenize used for automatically fill data param of request
+def _request_lines(raw_request: bytes, *, tokenize: bool) -> list[str]:
+    request, data, data_param_name, headers = decode_http_request(raw_request, tokenize)
+    if not request.path.startswith("/"):
+        raise ValueError("request path must start with / to be a valid HTTP request")
+    method = validate_request_method(request.command)
+
+    lines = [
+        f"headers = materialize({headers!r}, target)",
+        f"url = f\"http://{{target.host}}:{{target.port}}\" + materialize({request.path!r}, target)",
+    ]
+    arguments = ["url"]
+    if data is not None:
+        lines.append(f"data = materialize({data!r}, target)")
+        arguments.append(f"{data_param_name}=data")
+    arguments.extend(["headers=headers", "timeout=target.timeout"])
+    lines.extend(
+        [
+            f"response = session.{method}({', '.join(arguments)})",
+            "output.extend(response.content)",
+            "output.extend(b\"\\n\")",
+        ]
+    )
+    return lines
+
+
+def _render_flow(
+    flow: FlowDetail,
+    requests_to_replay: list[bytes],
+    *,
+    tokenize: bool,
+    service_name: str,
+    candidates: list[str] | None,
+) -> str:
+    body = ["output = bytearray()", "session = requests.Session()"]
+    for raw_request in requests_to_replay:
+        body.extend(_request_lines(raw_request, tokenize=tokenize))
+    body.append("return bytes(output)")
+
+    return render_ecsc_exploit(
+        service=service_name,
+        port=flow.port_dst,
+        protocol="http",
+        candidates=candidates or [],
+        imports="import requests",
+        exploit_body="\n".join(body),
+    )
+
+
 def convert_single_http_requests(
     flow: FlowDetail,
     item_index: int,
     tokenize: bool = True,
     use_requests_session: bool = False,
+    service_name: str = "service",
+    candidates: list[str] | None = None,
 ):
+    # Kept for API compatibility. A per-target Session is always used because
+    # the ECSC runner may execute different targets concurrently.
+    del use_requests_session
     if not flow.items:
         return "No data"
-
-    request, data, data_param_name, headers = decode_http_request(
-        flow.items[item_index].data, tokenize
-    )
-    if not request.path.startswith("/"):
-        raise Exception("request path must start with / to be a valid HTTP request")
-    request_path_repr = repr(request.path)
-    request_method = validate_request_method(request.command)
-
-    return render(
-        HEADER_TEMPLATE,
-        use_requests_session=use_requests_session,
-        port=flow.port_dst,
-    ) + render(
-        REQUEST_TEMPLATE,
-        headers=repr(headers),
-        data=data,
-        request_method=request_method,
-        request_path_repr=request_path_repr,
-        data_param_name=data_param_name,
-        use_requests_session=use_requests_session,
-        port=flow.port_dst,
-        print_info=True,
+    return _render_flow(
+        flow,
+        [flow.items[item_index].data],
+        tokenize=tokenize,
+        service_name=service_name,
+        candidates=candidates,
     )
 
 
 def convert_flow_to_http_requests(
-    flow: FlowDetail, tokenize: bool = True, use_requests_session: bool = True
+    flow: FlowDetail,
+    tokenize: bool = True,
+    use_requests_session: bool = True,
+    service_name: str = "service",
+    candidates: list[str] | None = None,
 ):
-    port = flow.port_dst
-    script = render(
-        HEADER_TEMPLATE,
-        use_requests_session=use_requests_session,
-        port=port,
+    del use_requests_session
+    raw_requests = [item.data for item in flow.kind_items() if item.direction == "c"]
+    return _render_flow(
+        flow,
+        raw_requests,
+        tokenize=tokenize,
+        service_name=service_name,
+        candidates=candidates,
     )
-
-    for item in flow.kind_items():
-        if item.direction == "c":
-            request, data, data_param_name, headers = decode_http_request(
-                item.data, tokenize
-            )
-            request_method = validate_request_method(request.command)
-            if not request.path.startswith("/"):
-                raise Exception(
-                    "request path must start with / to be a valid HTTP request"
-                )
-            request_path_repr = repr(request.path)
-
-            script += render(
-                REQUEST_TEMPLATE,
-                headers=repr(headers),
-                data=data,
-                request_method=request_method,
-                request_path_repr=request_path_repr,
-                data_param_name=data_param_name,
-                use_requests_session=use_requests_session,
-                port=port,
-                print_info=True,
-            )
-    return script
 
 
 def validate_request_method(request_method: str):
     request_method = request_method.lower()
-    if request_method not in [
+    if request_method not in {
         "delete",
         "get",
         "head",
@@ -226,7 +192,6 @@ def validate_request_method(request_method: str):
         "patch",
         "post",
         "put",
-    ]:
-        # Throw Exception for a bad method to prevent command inject via a nasty request method
-        raise Exception(f"Invalid request method: {request_method}")
+    }:
+        raise ValueError(f"Invalid request method: {request_method}")
     return request_method

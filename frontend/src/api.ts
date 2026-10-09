@@ -11,6 +11,9 @@ import {
   Stats,
   TicksAttackInfo,
   TicksAttackQuery,
+  TriageGroup,
+  IngestionHealth,
+  AttackFarmExport,
 } from "./types";
 
 function base64DecodeUnicode(str: string) : string {
@@ -129,6 +132,15 @@ export const tulipApi = createApi({
         }
       }),
     }),
+    getTriage: builder.query<TriageGroup[], number | void>({
+      query: (limit = 1000) => ({ url: "/triage", params: { limit } }),
+    }),
+    getIngestionHealth: builder.query<IngestionHealth, void>({
+      query: () => "/ingestion_health",
+    }),
+    getAttackFarmExport: builder.query<AttackFarmExport, string>({
+      query: (id) => `/exploit/${id}`,
+    }),
     toPwnTools: builder.query<string, string>({
       query: (id) => ({ url: `/to_pwn/${id}`, responseHandler: "text" }),
     }),
@@ -206,4 +218,7 @@ export const {
   useStarFlowMutation,
   useGetStatsQuery,
   useGetUnderAttackQuery,
+  useGetTriageQuery,
+  useGetIngestionHealthQuery,
+  useLazyGetAttackFarmExportQuery,
 } = tulipApi;

@@ -133,3 +133,8 @@ workspace.xml
 
 /traffic
 suricata
+.ecsc/
+.env.ecsc
+docker-compose.ecsc.yml
+Caddyfile.ecsc
+services/timescale/Dockerfile.before-clang19

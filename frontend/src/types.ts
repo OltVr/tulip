@@ -97,3 +97,59 @@ export interface TicksAttackQuery {
   from_tick: number;
   to_tick: number;
 }
+
+export type TriageClassification = "attack" | "checker" | "unknown";
+
+export interface FiregexRule {
+  pattern: string;
+  mode: "S" | "C" | "B";
+  case_sensitive: boolean;
+  engine: string;
+  specificity: "high" | "medium";
+  warning: string;
+}
+
+export interface TriageGroup {
+  fingerprint: string;
+  classification: TriageClassification;
+  confidence: number;
+  reasons: string[];
+  count: number;
+  first_seen: string;
+  last_seen: string;
+  representative_flow_id: string;
+  service: string;
+  ip_dst: string;
+  port_dst: number;
+  method: string | null;
+  path: string | null;
+  status: number | null;
+  request_preview: string;
+  response_preview: string;
+  request_bytes: number;
+  response_bytes: number;
+  source: "live sample · redacted" | "synthetic demo";
+  firegex: FiregexRule | null;
+}
+
+export interface IngestionHealth {
+  status: "healthy" | "stale" | "empty";
+  last_flow_time: string | null;
+  age_seconds: number | null;
+  flows_last_minute: number;
+  current_tick: number;
+  captured_tick: number | null;
+  capture_delay_ticks: number | null;
+}
+
+export interface AttackFarmExport {
+  filename: string;
+  protocol: "http" | "tcp";
+  port: number;
+  service: string;
+  runtime: string;
+  code: string;
+  candidates: { value: string; kind: string; recommended_attack_info: boolean }[];
+  variables: { name: string; purpose: string }[];
+  context_fields: { name: string; purpose: string }[];
+}

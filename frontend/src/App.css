@@ -3,8 +3,8 @@
 /* Grid */
 .grid-container {
   display: grid;
-  grid-template-columns: 400px 1fr;
-  grid-template-rows: 50px calc(100vh - 50px);
+  grid-template-columns: 360px 1fr;
+  grid-template-rows: 64px calc(100vh - 64px);
   grid-column-gap: 0px;
   grid-row-gap: 0px;
 }
@@ -13,6 +13,7 @@
   grid-area: 2 / 1 / 3 / 2;
   border-right: 1px solid rgba(0, 0, 0, 0.2);
   overflow: auto;
+  background: #f8fafc;
 }
 
 .flow-details-area {
@@ -24,6 +25,8 @@
 .header-area {
   grid-area: 1 / 1 / 2 / 3;
   border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
 /* no need for footer
@@ -37,17 +40,101 @@
 .header {
   display: flex;
   align-items: center;
-  height: 50px;
-  @apply gap-3;
+  height: 64px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  @apply gap-2.5 px-3;
+}
 
-  input {
-    @apply flex bg-gray-200 py-1 px-3 rounded-md;
+.header::-webkit-scrollbar {
+  display: none;
+}
+
+.header-brand {
+  @apply flex h-11 shrink-0 items-center gap-2 rounded-xl pr-2 focus-visible:ring-2 focus-visible:ring-rose-400;
+}
+
+.header-brand-mark {
+  @apply flex h-9 w-9 items-center justify-center rounded-lg bg-rose-500/10 text-xl ring-1 ring-rose-400/20;
+}
+
+.rose-logo-on-dark {
+  filter: brightness(0) invert(1);
+}
+
+.header-search-group {
+  width: clamp(320px, 27vw, 500px);
+  @apply flex h-10 shrink-0 overflow-hidden rounded-xl border border-slate-700 bg-slate-800 shadow-inner transition-colors focus-within:border-rose-400 focus-within:ring-2 focus-within:ring-rose-500/20;
+}
+
+.header-search-input {
+  @apply h-full w-full border-0 bg-transparent py-0 pl-9 pr-9 text-sm text-slate-100 placeholder:text-slate-500 focus:ring-0;
+}
+
+.header-service-select {
+  width: 148px;
+  @apply h-full shrink-0 border-0 border-l border-slate-700 bg-slate-800 px-3 text-sm font-semibold text-slate-200 focus:ring-0;
+}
+
+.header-control-group {
+  @apply flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-2 shadow-inner;
+}
+
+.header-range-input {
+  width: 64px;
+  @apply h-8 appearance-none rounded-md border-0 bg-slate-900 px-2 text-center text-xs font-semibold text-slate-100 placeholder:text-slate-600 focus:ring-2 focus:ring-rose-500/40;
+}
+
+.header-range-input::-webkit-inner-spin-button,
+.header-range-input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.header-latest-button {
+  @apply ml-1 h-8 whitespace-nowrap rounded-lg bg-rose-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-rose-500 focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 active:bg-rose-700;
+}
+
+.header-nav-button {
+  @apply inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-transparent px-3 text-sm font-semibold text-slate-300 hover:border-slate-700 hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-rose-400;
+}
+
+.header-slot-button {
+  @apply inline-flex h-7 min-w-[62px] items-center gap-1.5 rounded-md border border-slate-600 bg-slate-900 px-2 font-mono text-[10px] text-slate-400 hover:border-slate-500 hover:text-white focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+.header-slot-button > span {
+  @apply font-sans font-black text-slate-500;
+}
+
+.header-slot-button-active {
+  @apply border-rose-400/50 bg-rose-500/10 text-rose-200;
+}
+
+.header-compare-button {
+  @apply ml-1 h-8 rounded-lg bg-rose-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-rose-500 focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 active:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 disabled:shadow-none;
+}
+
+.header-tick {
+  @apply ml-auto flex h-10 shrink-0 items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500;
+}
+
+.header-tick strong {
+  @apply font-mono text-sm tracking-normal text-white;
+}
+
+@media (max-width: 1200px) {
+  .grid-container {
+    grid-template-columns: 320px 1fr;
   }
 
-  .header-icon {
-    @apply text-2xl pl-5 pr-2
+  .header-search-group {
+    width: 340px;
   }
-  
+
+  .header-service-select {
+    width: 125px;
+  }
 }
 
 .text-mono {

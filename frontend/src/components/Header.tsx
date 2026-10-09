@@ -1,320 +1,244 @@
-import { format, parse } from "date-fns";
-import { Suspense, useState } from "react";
-import { useHotkeys } from 'react-hotkeys-hook';
+import { Suspense } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
+import {
+  ChartBarIcon,
+  ClockIcon,
+  QuestionMarkCircleIcon,
+  SearchIcon,
+  SwitchHorizontalIcon,
+} from "@heroicons/react/outline";
 import {
   Link,
+  useNavigate,
   useParams,
   useSearchParams,
-  useNavigate,
 } from "react-router-dom";
-import ReactDiffViewer from "react-diff-viewer";
 
 import {
   END_FILTER_KEY,
+  FIRST_DIFF_KEY,
+  REPR_ID_KEY,
+  SECOND_DIFF_KEY,
   SERVICE_FILTER_KEY,
+  SERVICE_REFETCH_INTERVAL_MS,
   START_FILTER_KEY,
   TEXT_FILTER_KEY,
-  FIRST_DIFF_KEY,
-  SECOND_DIFF_KEY,
-  SERVICE_REFETCH_INTERVAL_MS,
-  REPR_ID_KEY,
 } from "../const";
-import {
-  useGetFlowQuery,
-  useGetServicesQuery,
-} from "../api";
+import { useGetServicesQuery } from "../api";
 import { getTickStuff } from "../tick";
 
+
 function ServiceSelection() {
-  const FILTER_KEY = SERVICE_FILTER_KEY;
-
-  // TODO add all, maybe user react-select
-
   const { data: services } = useGetServicesQuery(undefined, {
     pollingInterval: SERVICE_REFETCH_INTERVAL_MS,
   });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selected = searchParams.get(SERVICE_FILTER_KEY) ?? "";
 
-  const service_select = [
-    {
-      ip: "",
-      port: 0,
-      name: "all",
-    },
-    ...(services || []),
-  ];
-  let [searchParams, setSearchParams] = useSearchParams();
   return (
     <select
-      value={searchParams.get(FILTER_KEY) ?? ""}
+      aria-label="Filter by service"
+      className="header-service-select"
       onChange={(event) => {
-        let serviceFilter = event.target.value;
-        if (serviceFilter && serviceFilter != "all") {
-          searchParams.set(FILTER_KEY, serviceFilter);
-        } else {
-          searchParams.delete(FILTER_KEY);
-        }
-        setSearchParams(searchParams);
+        const next = new URLSearchParams(searchParams);
+        if (event.target.value) next.set(SERVICE_FILTER_KEY, event.target.value);
+        else next.delete(SERVICE_FILTER_KEY);
+        setSearchParams(next);
       }}
+      value={selected}
     >
-      {service_select.map((service) => (
-        <option key={service.name} value={service.name}>
-          {service.name}
-        </option>
+      <option value="">All services</option>
+      {(services ?? []).map((service) => (
+        <option key={service.name} value={service.name}>{service.name}</option>
       ))}
     </select>
   );
 }
 
 function TextSearch() {
-  const FILTER_KEY = TEXT_FILTER_KEY;
-  let [searchParams, setSearchParams] = useSearchParams();
-  useHotkeys('s', (e) => {
-    let el = document.getElementById('search') as HTMLInputElement;
-    el?.focus();
-    el?.select();
-    e.preventDefault()
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useHotkeys("s", (event) => {
+    const element = document.getElementById("search") as HTMLInputElement;
+    element?.focus();
+    element?.select();
+    event.preventDefault();
   });
+
   return (
-    <div>
+    <div className="relative min-w-0 flex-1">
+      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
       <input
-        type="text"
-        placeholder="regex"
+        aria-label="Search captured traffic"
+        className="header-search-input"
         id="search"
-        value={searchParams.get(FILTER_KEY) || ""}
         onChange={(event) => {
-          let textFilter = event.target.value;
-          if (textFilter) {
-            searchParams.set(FILTER_KEY, textFilter);
-          } else {
-            searchParams.delete(FILTER_KEY);
-          }
-          setSearchParams(searchParams);
+          const next = new URLSearchParams(searchParams);
+          if (event.target.value) next.set(TEXT_FILTER_KEY, event.target.value);
+          else next.delete(TEXT_FILTER_KEY);
+          setSearchParams(next);
         }}
-      ></input>
+        placeholder="Search payload regex…"
+        type="text"
+        value={searchParams.get(TEXT_FILTER_KEY) || ""}
+      />
+      <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">S</kbd>
     </div>
   );
 }
 
+function TickRange() {
+  const { startTickParam, endTickParam, setTimeParam, setToLastnTicks } = getTickStuff();
 
-function StartDateSelection() {
-  let { startTickParam, setTimeParam } = getTickStuff();
   return (
-    <div>
+    <div className="header-control-group" aria-label="Tick range">
+      <ClockIcon className="h-4 w-4 shrink-0 text-slate-400" />
+      <span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-500 xl:inline">Ticks</span>
       <input
-        className="w-20"
+        aria-label="Start tick"
+        className="header-range-input"
         id="startdateselection"
+        onChange={(event) => setTimeParam(event.target.value === "" ? null : parseInt(event.target.value), START_FILTER_KEY)}
+        placeholder="From"
         type="number"
-        placeholder="from"
         value={startTickParam}
-        onChange={(event) => {
-          setTimeParam(event.target.value == "" ? null : parseInt(event.target.value), START_FILTER_KEY);
-        }}
-      ></input>
-    </div>
-  );
-}
-
-function EndDateSelection() {
-  let { endTickParam, setTimeParam } = getTickStuff();
-  return (
-    <div>
+      />
+      <span className="text-xs text-slate-600">—</span>
       <input
-        className="w-20"
+        aria-label="End tick"
+        className="header-range-input"
         id="enddateselection"
+        onChange={(event) => setTimeParam(event.target.value === "" ? null : parseInt(event.target.value), END_FILTER_KEY)}
+        placeholder="To"
         type="number"
-        placeholder="to"
         value={endTickParam}
-        onChange={(event) => {
-          setTimeParam(event.target.value == "" ? null : parseInt(event.target.value), END_FILTER_KEY);
-        }}
-      ></input>
+      />
+      <button
+        className="header-latest-button"
+        onClick={() => setToLastnTicks(5)}
+        title="Jump to the latest five ticks (A)"
+        type="button"
+      >
+        Latest 5
+      </button>
     </div>
   );
 }
 
-function FirstDiff() {
-  let params = useParams();
-  let [searchParams, setSearchParams] = useSearchParams();
-  const [firstFlow, setFirstFlow] = useState<string>(
-    searchParams.get(FIRST_DIFF_KEY) ?? ""
-  );
+function ComparisonControls() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reprId = searchParams.get(REPR_ID_KEY);
+  const currentFlow = params.id ? (reprId ? `${params.id}:${reprId}` : params.id) : null;
+  const first = searchParams.get(FIRST_DIFF_KEY);
+  const second = searchParams.get(SECOND_DIFF_KEY);
+  const visible = Boolean(currentFlow || first || second);
 
-  function setFirstDiffFlow() {
-    let textFilter = params.id;
-    let reprId = searchParams.get(REPR_ID_KEY);
-    let reprIdSlug = reprId ? `${textFilter}:${reprId}` : `${textFilter}`
-    if (textFilter) {
-      searchParams.set(FIRST_DIFF_KEY, reprIdSlug);
-      setFirstFlow(reprIdSlug);
-    } else {
-      searchParams.delete(FIRST_DIFF_KEY);
-      setFirstFlow("");
-    }
-    setSearchParams(searchParams);
-  }
+  const setSlot = (key: string, currentValue: string | null) => {
+    if (!currentFlow) return;
+    const next = new URLSearchParams(searchParams);
+    if (currentValue === currentFlow) next.delete(key);
+    else next.set(key, currentFlow);
+    setSearchParams(next);
+  };
 
-  useHotkeys("f", () => {
-    setFirstDiffFlow();
-  });
+  const runComparison = () => {
+    if (!first || !second) return;
+    const baseId = params.id ?? first.split(":", 1)[0];
+    navigate(`/diff/${baseId}?${searchParams}`, { replace: true });
+  };
 
-  return (
-    <input
-      type="text"
-      className="md:w-72"
-      placeholder="First Diff ID"
-      readOnly
-      value={firstFlow}
-      onClick={(event) => setFirstDiffFlow()}
-      onContextMenu={(event) => {
-        searchParams.delete(FIRST_DIFF_KEY);
-        setFirstFlow("");
-        setSearchParams(searchParams);
-        event.preventDefault();
-      }}
-    ></input>
-  );
-}
+  useHotkeys("f", () => setSlot(FIRST_DIFF_KEY, first));
+  useHotkeys("e", () => setSlot(SECOND_DIFF_KEY, second));
+  useHotkeys("d", runComparison);
 
-function SecondDiff() {
-  let params = useParams();
-  let [searchParams, setSearchParams] = useSearchParams();
-  const [secondFlow, setSecondFlow] = useState<string>(
-    searchParams.get(SECOND_DIFF_KEY) ?? ""
-  );
+  if (!visible) return null;
 
-  function setSecondDiffFlow() {
-    let textFilter = params.id;
-    let reprId = searchParams.get(REPR_ID_KEY);
-    let reprIdSlug = reprId ? `${textFilter}:${reprId}` : `${textFilter}`
-    if (textFilter) {
-      searchParams.set(SECOND_DIFF_KEY, reprIdSlug);
-      setSecondFlow(reprIdSlug);
-    } else {
-      searchParams.delete(SECOND_DIFF_KEY);
-      setSecondFlow("");
-    }
-    setSearchParams(searchParams);
-  }
-
-  useHotkeys("e", () => {
-    setSecondDiffFlow();
-  });
+  const shortId = (value: string | null) => value ? value.split(":", 1)[0].slice(0, 8) : "Set";
 
   return (
-    <input
-      type="text"
-      className="md:w-72"
-      placeholder="Second Flow ID"
-      readOnly
-      value={secondFlow}
-      onClick={(event) => setSecondDiffFlow()}
-      onContextMenu={(event) => {
-        searchParams.delete(SECOND_DIFF_KEY);
-        setSecondFlow("");
-        setSearchParams(searchParams);
-        event.preventDefault();
-      }}
-    ></input>
-  );
-}
-
-function Diff() {
-  let params = useParams();
-
-  let [searchParams] = useSearchParams();
-
-  let navigate = useNavigate();
-
-  function navigateToDiff() {
-    navigate(`/diff/${params.id ?? ""}?${searchParams}`, { replace: true });
-  }
-
-  useHotkeys("d", () => {
-    navigateToDiff();
-  });
-
-  return (
-    <button
-      className=" bg-amber-100 text-gray-800 rounded-md px-2 py-1"
-      onClick={() => {
-        navigateToDiff()
-      }}
-    >
-      Diff
-    </button>
+    <div className="header-control-group ml-auto" aria-label="Flow comparison">
+      <SwitchHorizontalIcon className="h-4 w-4 text-slate-400" />
+      <span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-500 2xl:inline">Compare</span>
+      <button
+        className={`header-slot-button ${first ? "header-slot-button-active" : ""}`}
+        disabled={!currentFlow}
+        onClick={() => setSlot(FIRST_DIFF_KEY, first)}
+        title={first === currentFlow ? "Clear slot A" : "Set current flow as slot A (F)"}
+        type="button"
+      >
+        <span>A</span>{shortId(first)}
+      </button>
+      <button
+        className={`header-slot-button ${second ? "header-slot-button-active" : ""}`}
+        disabled={!currentFlow}
+        onClick={() => setSlot(SECOND_DIFF_KEY, second)}
+        title={second === currentFlow ? "Clear slot B" : "Set current flow as slot B (E)"}
+        type="button"
+      >
+        <span>B</span>{shortId(second)}
+      </button>
+      <button
+        className="header-compare-button"
+        disabled={!first || !second}
+        onClick={runComparison}
+        title="Compare selected flows (D)"
+        type="button"
+      >
+        Compare
+      </button>
+    </div>
   );
 }
 
 export function Header() {
-  let { currentTick, setToLastnTicks, setTimeParam } = getTickStuff();
-  let [searchParams] = useSearchParams();
+  const { currentTick, setToLastnTicks, setTimeParam } = getTickStuff();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  let navigate = useNavigate();
-
-  useHotkeys('g', () => navigate(`/corrie?${searchParams}`, { replace: true }))
-  useHotkeys('a', () => setToLastnTicks(5));
-  useHotkeys('c', () => {
-    (document.getElementById("startdateselection") as HTMLInputElement).value = "";
-    (document.getElementById("enddateselection") as HTMLInputElement).value = "";
+  useHotkeys("g", () => navigate(`/corrie?${searchParams}`, { replace: true }));
+  useHotkeys("a", () => setToLastnTicks(5));
+  useHotkeys("c", () => {
     setTimeParam(null, START_FILTER_KEY);
     setTimeParam(null, END_FILTER_KEY);
   });
 
   return (
     <>
-      <Link to={`/?${searchParams}`}>
-        <div className="header-icon">🌷</div>
+      <Link className="header-brand" title="Traffic intelligence" to={`/?${searchParams}`}>
+        <span className="header-brand-mark">
+          <img aria-hidden="true" className="rose-logo-on-dark h-8 w-8" src="/rose-mark.png" />
+        </span>
+        <span className="leading-none">
+          <span className="block font-black tracking-wide text-white">ROSE</span>
+          <span className="block text-[8px] font-bold uppercase tracking-[0.22em] text-rose-300">Defender</span>
+        </span>
       </Link>
-      <div>
-        <TextSearch></TextSearch>
+
+      <div className="header-search-group">
+        <TextSearch />
+        <Suspense><ServiceSelection /></Suspense>
       </div>
-      <div>
-        <Suspense>
-          <ServiceSelection></ServiceSelection>
-        </Suspense>
-      </div>
-      <div>
-        <StartDateSelection></StartDateSelection>
-      </div>
-      <div>
-        <EndDateSelection></EndDateSelection>
-      </div>
-      <div>
-        <button
-          className=" bg-amber-100 text-gray-800 rounded-md px-2 py-1"
-          onClick={() => setToLastnTicks(5)}
-        >
-          Last 5 ticks
-        </button>
-      </div>
-      <Link to={`/corrie?${searchParams}`}>
-        <div className="bg-blue-100 text-gray-800 rounded-md px-2 py-1">
-          Graph view
-        </div>
-      </Link>
-      <div className="ml-auto mr-4" style={{ display: "flex" }}>
-        <div className="mr-4">
-          <FirstDiff />
-        </div>
-        <div className="mr-4">
-          <SecondDiff />
-        </div>
-        <div className="mr-6">
-          <Suspense>
-            <Diff />
-          </Suspense>
-        </div>
-        <div
-          className="ml-auto"
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignContent: "center",
-            flexDirection: "column",
-          }}
-        >
-          Current: {currentTick}
-        </div>
+
+      <TickRange />
+
+      <nav className="flex items-center gap-1" aria-label="Primary navigation">
+        <Link className="header-nav-button" title="Graph view (G)" to={`/corrie?${searchParams}`}>
+          <ChartBarIcon className="h-4 w-4" />
+          <span className="hidden xl:inline">Graph</span>
+        </Link>
+        <Link className="header-nav-button" to={`/help?${searchParams}`}>
+          <QuestionMarkCircleIcon className="h-4 w-4" />
+          <span className="hidden xl:inline">Guide</span>
+        </Link>
+      </nav>
+
+      <ComparisonControls />
+
+      <div className="header-tick" title="Current competition tick">
+        <span>Tick</span>
+        <strong>{currentTick}</strong>
       </div>
     </>
   );

@@ -432,20 +432,29 @@ func main() {
 
 func connectToPCAPOverIP(service *AssemblerService, pcapIP string) {
 	for {
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		log.Println("Connecting to PCAP-over-IP:", pcapIP)
 
-		tcpServer, err := net.ResolveTCPAddr("tcp", pcapIP)
+		rawConn, err := net.DialTimeout("tcp", pcapIP, 5*time.Second)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-
-		conn, err := net.DialTCP("tcp", nil, tcpServer)
-		if err != nil {
-			log.Println(err)
+		conn, ok := rawConn.(*net.TCPConn)
+		if !ok {
+			log.Println("PCAP-over-IP connection is not TCP:", pcapIP)
+			rawConn.Close()
 			continue
+		}
+
+		// PCAP streams can be idle between checker/service requests. Keep the
+		// TCP path alive so NAT, firewalls and VPN state do not silently expire.
+		if err := conn.SetKeepAlive(true); err != nil {
+			log.Println("Unable to enable TCP keepalive:", err)
+		}
+		if err := conn.SetKeepAlivePeriod(10 * time.Second); err != nil {
+			log.Println("Unable to set TCP keepalive period:", err)
 		}
 
 		pcapFile, err := conn.File()

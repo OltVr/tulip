@@ -351,6 +351,17 @@ module.exports = {
       DEFAULT: '1',
     },
     fontFamily: {
+      mono: [
+        'Recursive',
+        'ui-monospace',
+        'SFMono-Regular',
+        'Menlo',
+        'Monaco',
+        'Consolas',
+        '"Liberation Mono"',
+        '"Courier New"',
+        'monospace',
+      ],
       sans: [
         'Recursive',
         'ui-sans-serif',

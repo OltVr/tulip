@@ -1,14 +1,26 @@
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
-import { Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import "./App.css";
 import { Header } from "./components/Header";
-import { Home } from "./pages/Home";
 import { FlowList } from "./components/FlowList";
-import { FlowView } from "./pages/FlowView";
-import { DiffView } from "./pages/DiffView";
-import { Corrie } from "./components/Corrie";
+
+const TriageView = lazy(() =>
+  import("./pages/TriageView").then((module) => ({ default: module.TriageView }))
+);
+const Home = lazy(() =>
+  import("./pages/Home").then((module) => ({ default: module.Home }))
+);
+const FlowView = lazy(() =>
+  import("./pages/FlowView").then((module) => ({ default: module.FlowView }))
+);
+const DiffView = lazy(() =>
+  import("./pages/DiffView").then((module) => ({ default: module.DiffView }))
+);
+const Corrie = lazy(() =>
+  import("./components/Corrie").then((module) => ({ default: module.Corrie }))
+);
 
 function App() {
   useHotkeys('esc', () => (document.activeElement as HTMLElement).blur(), {enableOnFormTags: true});
@@ -16,7 +28,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
+          <Route index element={<Suspense><TriageView /></Suspense>} />
+          <Route path="help" element={<Suspense><Home /></Suspense>} />
           <Route
             path="flow/:id"
             element={

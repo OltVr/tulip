@@ -1,0 +1,14 @@
+services:
+  demo-seed:
+    image: tulip-api:latest
+    build:
+      context: services/api
+      dockerfile: Dockerfile-api
+    depends_on:
+      - timescale
+    networks:
+      - internal
+    environment:
+      TIMESCALE: ${TIMESCALE}
+    command: ["python", "demo_seed.py"]
+    restart: "no"

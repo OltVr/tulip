@@ -10,7 +10,7 @@ export const REPR_ID_KEY = "reprid";
 export const CORRELATION_MODE_KEY = "correlation";
 
 export const SERVICE_REFETCH_INTERVAL_MS = 15000;
-export const TICK_REFETCH_INTERVAL_MS = 10000;
+export const TICK_REFETCH_INTERVAL_MS = 45000;
 export const FLOW_LIST_REFETCH_INTERVAL_MS = 30000;
 export const UNDER_ATTACK_REFETCH_INTERVAL_MS = 30000;
 export const MAX_LENGTH_FOR_HIGHLIGHT = 400000;

@@ -33,7 +33,7 @@ import dateutil.parser
 from ipaddress import ip_network
 
 from configurations import (
-    services,
+    get_services,
     traffic_dir,
     start_date,
     tick_length,
@@ -48,6 +48,7 @@ from flask_cors import CORS
 from flask import request
 
 from flow2pwn import flow2pwn
+from triage import attackfarm_export, ingestion_health, triage_groups
 import database, json_util
 
 application = Flask(__name__)
@@ -157,6 +158,32 @@ def getTags():
     return return_json_response(tags)
 
 
+@application.route("/triage")
+def getTriage():
+    limit = request.args.get("limit", default=1000, type=int)
+    with db.connection() as c:
+        groups = triage_groups(c, limit=limit)
+    return return_json_response(groups)
+
+
+@application.route("/ingestion_health")
+def getIngestionHealth():
+    with db.connection() as c:
+        health = ingestion_health(c)
+    return return_json_response(health)
+
+
+@application.route("/attackfarm/<id>")
+@application.route("/exploit/<id>")
+def getAttackFarmExport(id):
+    flow_id = uuid.UUID(id)
+    with db.connection() as c:
+        flow = c.flow_detail(flow_id)
+    if flow is None:
+        return return_json_response({"error": "Flow not found"}, status=404)
+    return return_json_response(attackfarm_export(flow))
+
+
 @application.route("/star", methods=["POST"])
 def setStar():
     query = request.get_json()
@@ -169,7 +196,7 @@ def setStar():
 
 @application.route("/services")
 def getServices():
-    return return_json_response(services)
+    return return_json_response(get_services())
 
 
 @application.route("/flag_regex")

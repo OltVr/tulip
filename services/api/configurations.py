@@ -22,6 +22,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Flower.  If not, see <https://www.gnu.org/licenses/>.
 
+import json
 import os
 from pathlib import Path
 
@@ -34,17 +35,35 @@ flag_regex = os.getenv("FLAG_REGEX", "[A-Z0-9]{31}=")
 vm_ip = os.getenv("VM_IP", "10.10.3.1")
 visualizer_url = os.getenv("VISUALIZER_URL", "http://127.0.0.1:1337")
 
-vm_ip_1 = "10.60.2.1"
-helper = '''
-10.61.5.1:1237 CyberUni 4
-10.61.5.1:1236 CyberUni 3
-10.61.5.1:1235 CyberUni 1
-10.61.5.1:1234 CyberUni 2
-10.60.5.1:3003 ClosedSea 1
-10.60.5.1:3004 ClosedSea 2
-10.62.5.1:5000 Trademark
-10.63.5.1:1337 RPN
-'''
+services_json = os.getenv("SERVICES_JSON", "")
+services_file = Path(os.getenv("SERVICES_FILE", "")) if os.getenv("SERVICES_FILE") else None
+if services_json:
+    services = json.loads(services_json)
+    if not isinstance(services, list):
+        raise ValueError("SERVICES_JSON must contain a JSON list")
+    for service in services:
+        if not isinstance(service, dict):
+            raise ValueError("Each SERVICES_JSON entry must be an object")
+        if not {"ip", "port", "name"}.issubset(service):
+            raise ValueError("Each service requires ip, port, and name")
+        service["port"] = int(service["port"])
+else:
+    services = [{"ip": vm_ip, "port": -1, "name": "other"}]
 
-services = [{"ip": x.split(" ")[0].split(":")[0], "port": int(x.split(" ")[0].split(":")[1]), "name": " ".join(x.split(" ")[1:])} for x in helper.strip().split("\n")]
-services += [{"ip": vm_ip_1, "port": -1, "name": "other"}]
+
+def get_services():
+    if services_file and services_file.is_file():
+        try:
+            dynamic_services = json.loads(services_file.read_text(encoding="utf-8"))
+            if not isinstance(dynamic_services, list):
+                raise ValueError("services file must contain a list")
+            for service in dynamic_services:
+                if not isinstance(service, dict):
+                    raise ValueError("invalid dynamic service entry")
+                if not {"ip", "port", "name"}.issubset(service):
+                    raise ValueError("dynamic service requires ip, port, and name")
+                service["port"] = int(service["port"])
+            return dynamic_services
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+    return services

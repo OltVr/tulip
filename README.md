@@ -1,9 +1,12 @@
-# 🌷 Tulip
+# 🌹 Rose
 
-Tulip is a flow analyzer meant for use during Attack / Defence CTF competitions. It allows players to easily find some traffic related to their service and automatically generates python snippets to replicate attacks.
+For the hardened ECSC offsite/vulnbox installation and its end-to-end test, see
+[ROSE_DEPLOYMENT.md](ROSE_DEPLOYMENT.md).
+
+Rose is a defender-focused flow analyzer for Attack / Defence CTF competitions. It groups repeated checker behavior, highlights likely attacks, produces Firegex blocking regexes, and generates Python snippets for attack replay. Rose is based on the upstream Tulip project.
 
 ## Origins
-Tulip was developed by Team Europe for use in the first International Cyber Security Challenge. The project is a fork of [flower](https://github.com/secgroup/flower), but it contains quite some changes:
+The upstream Tulip project was developed by Team Europe for use in the first International Cyber Security Challenge. It is itself a fork of [flower](https://github.com/secgroup/flower), with extensive changes:
 * New front-end (typescript / react / tailwind)
 * New ingestor code, based on gopacket
 * IPv6 support
