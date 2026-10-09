@@ -101,14 +101,14 @@ def _request_lines(raw_request: bytes, *, tokenize: bool) -> list[str]:
     method = validate_request_method(request.command)
 
     lines = [
-        f"headers = materialize({headers!r}, target)",
-        f"url = f\"http://{{target.host}}:{{target.port}}\" + materialize({request.path!r}, target)",
+        f"headers = materialize({headers!r}, flag_id)",
+        f"url = f\"http://{{host}}:{{port}}\" + materialize({request.path!r}, flag_id)",
     ]
     arguments = ["url"]
     if data is not None:
-        lines.append(f"data = materialize({data!r}, target)")
+        lines.append(f"data = materialize({data!r}, flag_id)")
         arguments.append(f"{data_param_name}=data")
-    arguments.extend(["headers=headers", "timeout=target.timeout"])
+    arguments.extend(["headers=headers", "timeout=timeout"])
     lines.extend(
         [
             f"response = session.{method}({', '.join(arguments)})",
@@ -126,6 +126,7 @@ def _render_flow(
     tokenize: bool,
     service_name: str,
     candidates: list[str] | None,
+    attack_info_tokens: list[str] | None,
 ) -> str:
     body = ["output = bytearray()", "session = requests.Session()"]
     for raw_request in requests_to_replay:
@@ -137,6 +138,7 @@ def _render_flow(
         port=flow.port_dst,
         protocol="http",
         candidates=candidates or [],
+        attack_info_tokens=attack_info_tokens or [],
         imports="import requests",
         exploit_body="\n".join(body),
     )
@@ -149,6 +151,7 @@ def convert_single_http_requests(
     use_requests_session: bool = False,
     service_name: str = "service",
     candidates: list[str] | None = None,
+    attack_info_tokens: list[str] | None = None,
 ):
     # Kept for API compatibility. A per-target Session is always used because
     # the ECSC runner may execute different targets concurrently.
@@ -161,6 +164,7 @@ def convert_single_http_requests(
         tokenize=tokenize,
         service_name=service_name,
         candidates=candidates,
+        attack_info_tokens=attack_info_tokens,
     )
 
 
@@ -170,6 +174,7 @@ def convert_flow_to_http_requests(
     use_requests_session: bool = True,
     service_name: str = "service",
     candidates: list[str] | None = None,
+    attack_info_tokens: list[str] | None = None,
 ):
     del use_requests_session
     raw_requests = [item.data for item in flow.kind_items() if item.direction == "c"]
@@ -179,6 +184,7 @@ def convert_flow_to_http_requests(
         tokenize=tokenize,
         service_name=service_name,
         candidates=candidates,
+        attack_info_tokens=attack_info_tokens,
     )
 
 

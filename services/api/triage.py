@@ -28,20 +28,113 @@ NORMALIZERS = (
 )
 
 ATTACK_MARKERS = (
-    (re.compile(rb"(?:\.\./|%2e%2e|/etc/passwd)", re.IGNORECASE), "path traversal"),
-    (re.compile(rb"(?:union\s+select|or\s+['\"]?1['\"]?\s*=\s*['\"]?1)", re.IGNORECASE), "SQL injection shape"),
-    (re.compile(rb"(?:/bin/(?:ba)?sh|cmd=|powershell|system\s*\()", re.IGNORECASE), "command execution shape"),
+    (
+        re.compile(
+            rb"(?:\.\.(?:%2f|%5c|[/\\])|%2e%2e(?:%2f|%5c|[/\\])|%252e%252e(?:%252f|%255c)|/etc/passwd)",
+            re.IGNORECASE,
+        ),
+        "path traversal",
+    ),
+    (
+        re.compile(
+            rb"(?:union\s+(?:all\s+)?select|(?:or|and)\s+['\"]?[0-9]+['\"]?\s*=\s*['\"]?[0-9]+|(?:sleep|pg_sleep|benchmark)\s*\(|waitfor\s+delay)",
+            re.IGNORECASE,
+        ),
+        "SQL injection shape",
+    ),
+    (
+        re.compile(
+            rb"(?:[?&](?:cmd|exec|command|shell)=|/bin/(?:ba)?sh|powershell(?:\.exe)?|system\s*\(|(?:%3b|;|%7c|\|)(?:cat|id|whoami|curl|wget)(?:%20|\s|\+))",
+            re.IGNORECASE,
+        ),
+        "command execution shape",
+    ),
     (re.compile(rb"(?:/backdoor|\batk_[A-Za-z0-9_-]*)", re.IGNORECASE), "attack-tool marker"),
     (re.compile(rb"A{48,}|\x90{16,}"), "overflow-sized repeated bytes"),
     (re.compile(rb"<script\b|javascript:", re.IGNORECASE), "script injection shape"),
+    (
+        re.compile(
+            rb"(?:\{\{[^}\r\n]{0,160}(?:__class__|__mro__|config|request|self|cycler|lipsum)[^}\r\n]{0,160}\}\}|\$\{jndi:(?:ldap|rmi|dns):|<%=?[^%\r\n]{1,200}%>)",
+            re.IGNORECASE,
+        ),
+        "template injection shape",
+    ),
+    (
+        re.compile(
+            rb"(?:<!DOCTYPE[\s\S]{0,400}<!ENTITY[\s\S]{0,200}(?:SYSTEM|PUBLIC)|<!ENTITY[\s\S]{0,200}(?:file|https?)://)",
+            re.IGNORECASE,
+        ),
+        "XXE shape",
+    ),
+    (
+        re.compile(
+            rb'(?:\xac\xed\x00\x05|O:\d+:"[^"]{1,80}":\d+:\{|(?:^|[=&])gASV[A-Za-z0-9+/=]{12,})',
+            re.IGNORECASE,
+        ),
+        "unsafe deserialization shape",
+    ),
+    (
+        re.compile(
+            rb'(?:["\']\$(?:ne|gt|gte|regex|where)["\']\s*:|(?:%24|\$)(?:ne|gt|gte|regex|where)(?:=|%5b))',
+            re.IGNORECASE,
+        ),
+        "NoSQL injection shape",
+    ),
+    (
+        re.compile(rb"(?:__proto__|constructor(?:%5b|\[)prototype(?:%5d|\]))", re.IGNORECASE),
+        "prototype pollution shape",
+    ),
+    (
+        re.compile(
+            rb"(?:[?&](?:url|uri|target|dest|destination|callback|webhook)=)(?:https?(?::|%3a)(?:/|%2f){2})?(?:127(?:\.|%2e)0(?:\.|%2e)0(?:\.|%2e)1|localhost|0(?:\.0){3}|169(?:\.|%2e)254(?:\.|%2e)169(?:\.|%2e)254|\[?::1\]?)",
+            re.IGNORECASE,
+        ),
+        "SSRF shape",
+    ),
+    (
+        re.compile(
+            rb"(?:(?:%0d%0a|%0a)(?:host|content-length|transfer-encoding|x-forwarded-for|location)(?::|%3a))",
+            re.IGNORECASE,
+        ),
+        "CRLF injection shape",
+    ),
+    (
+        re.compile(
+            rb"(?:content-length\s*:[^\r\n]*\r?\n(?:[^\r\n]*\r?\n){0,20}transfer-encoding\s*:\s*chunked|transfer-encoding\s*:\s*chunked\r?\n(?:[^\r\n]*\r?\n){0,20}content-length\s*:)",
+            re.IGNORECASE,
+        ),
+        "HTTP request smuggling shape",
+    ),
+    (
+        re.compile(rb"(?:/(?:\.git/(?:HEAD|config)|\.env)(?:[?\s]|$)|/proc/self/environ)", re.IGNORECASE),
+        "sensitive file probe",
+    ),
 )
 
 FIREGEX_PATTERNS = {
-    "path traversal": r"(?:\.\./|%2e%2e(?:%2f|/)|/etc/passwd)",
-    "SQL injection shape": r"(?:union[\x20\t]+(?:all[\x20\t]+)?select|(?:'|%27)[\x20\t]*or[\x20\t]+(?:'?[0-9]+'?)[\x20\t]*=[\x20\t]*(?:'?[0-9]+'?))",
-    "command execution shape": r"(?:[?&](?:cmd|exec|command)=|/bin/(?:ba)?sh|powershell(?:\.exe)?|system[\x20\t]*\()",
+    "path traversal": r"(?:\.\.(?:%2f|%5c|/|\\)|%2e%2e(?:%2f|%5c|/|\\)|%252e%252e(?:%252f|%255c)|/etc/passwd)",
+    "SQL injection shape": r"(?:union[\x20\t]+(?:all[\x20\t]+)?select|(?:or|and)[\x20\t]+['\"]?[0-9]+['\"]?[\x20\t]*=[\x20\t]*['\"]?[0-9]+|(?:sleep|pg_sleep|benchmark)[\x20\t]*\(|waitfor[\x20\t]+delay)",
+    "command execution shape": r"(?:[?&](?:cmd|exec|command|shell)=|/bin/(?:ba)?sh|powershell(?:\.exe)?|system[\x20\t]*\(|(?:%3b|;|%7c|\|)(?:cat|id|whoami|curl|wget)(?:%20|[\x20\t]|\+))",
     "overflow-sized repeated bytes": r"(?:A{48,}|\x90{16,})",
     "script injection shape": r"(?:<script(?:[\x20\t]|>)|javascript:)",
+    "template injection shape": r"(?:\{\{[^}\x0d\x0a]{0,160}(?:__class__|__mro__|config|request|self|cycler|lipsum)[^}\x0d\x0a]{0,160}\}\}|\$\{jndi:(?:ldap|rmi|dns):|<%=?[^%\x0d\x0a]{1,200}%>)",
+    "XXE shape": r"(?:<!DOCTYPE[\s\S]{0,400}<!ENTITY[\s\S]{0,200}(?:SYSTEM|PUBLIC)|<!ENTITY[\s\S]{0,200}(?:file|https?)://)",
+    "unsafe deserialization shape": r'(?:\xac\xed\x00\x05|O:[0-9]+:"[^"]{1,80}":[0-9]+:\{|(?:^|[=&])gASV[A-Za-z0-9+/=]{12,})',
+    "NoSQL injection shape": r'(?:["\']\$(?:ne|gt|gte|regex|where)["\'][\x20\t]*:|(?:%24|\$)(?:ne|gt|gte|regex|where)(?:=|%5b))',
+    "prototype pollution shape": r"(?:__proto__|constructor(?:%5b|\[)prototype(?:%5d|\]))",
+    "SSRF shape": r"(?:[?&](?:url|uri|target|dest|destination|callback|webhook)=)(?:https?(?::|%3a)(?:/|%2f){2})?(?:127(?:\.|%2e)0(?:\.|%2e)0(?:\.|%2e)1|localhost|0(?:\.0){3}|169(?:\.|%2e)254(?:\.|%2e)169(?:\.|%2e)254|\[?::1\]?)",
+    "CRLF injection shape": r"(?:(?:%0d%0a|%0a)(?:host|content-length|transfer-encoding|x-forwarded-for|location)(?::|%3a))",
+    "HTTP request smuggling shape": r"(?:content-length[\x20\t]*:[^\x0d\x0a]*\x0d?\x0a(?:[^\x0d\x0a]*\x0d?\x0a){0,20}transfer-encoding[\x20\t]*:[\x20\t]*chunked|transfer-encoding[\x20\t]*:[\x20\t]*chunked\x0d?\x0a(?:[^\x0d\x0a]*\x0d?\x0a){0,20}content-length[\x20\t]*:)",
+    "sensitive file probe": r"(?:/(?:\.git/(?:HEAD|config)|\.env)(?:[?\x20\t]|$)|/proc/self/environ)",
+}
+
+HIGH_SPECIFICITY_REASONS = {
+    "attack-tool marker",
+    "XXE shape",
+    "unsafe deserialization shape",
+    "prototype pollution shape",
+    "HTTP request smuggling shape",
+    "sensitive file probe",
 }
 
 
@@ -120,7 +213,7 @@ def _firegex_rule(flow: dict[str, Any], reasons: list[str]) -> dict[str, Any]:
     # Preserve order while avoiding duplicate alternatives.
     patterns = list(dict.fromkeys(patterns))
     pattern = patterns[0] if len(patterns) == 1 else "(?:" + "|".join(patterns) + ")"
-    specificity = "high" if any("backdoor" in value or "atk_" in value for value in patterns) else "medium"
+    specificity = "high" if HIGH_SPECIFICITY_REASONS.intersection(reasons) else "medium"
     return {
         "pattern": pattern,
         "mode": "S",
@@ -310,18 +403,25 @@ def attackfarm_export(flow) -> dict[str, Any]:
     client_data = b"".join(item.data for item in flow.kind_items() if item.direction == "c")
     candidates = _candidate_values(client_data)
     candidate_tokens = [candidate["value"] for candidate in candidates]
+    attack_info_tokens = [
+        candidate["value"]
+        for candidate in candidates
+        if candidate["recommended_attack_info"]
+    ]
     service_name = _service_name(flow)
     code = (
         convert_flow_to_http_requests(
             flow,
             service_name=service_name,
             candidates=candidate_tokens,
+            attack_info_tokens=attack_info_tokens,
         )
         if is_http
         else flow2pwn(
             flow,
             service_name=service_name,
             candidates=candidate_tokens,
+            attack_info_tokens=attack_info_tokens,
         )
     )
     safe_service_name = re.sub(r"[^A-Za-z0-9_-]+", "_", service_name).strip("_") or "service"
@@ -337,26 +437,17 @@ def attackfarm_export(flow) -> dict[str, Any]:
         "variables": [
             {"name": "ECSC_API / --api", "purpose": "attack.json endpoint override"},
             {"name": "ECSC_SERVICE / --service", "purpose": "exact service key"},
-            {"name": "ECSC_TEAM / --team", "purpose": "one team ID, IP, or name"},
-            {"name": "ECSC_ROUND / --round", "purpose": "round number; -1 means newest"},
+            {"name": "--round", "purpose": "one round; default attacks every still-valid round"},
             {"name": "TARGET_HOST / --host", "purpose": "single-target mode without attack.json"},
             {"name": "TARGET_FLAG_ID / --flag-id", "purpose": "single-target dynamic flag ID"},
-            {"name": "TARGET_EXTRA / --extra-json", "purpose": "arbitrary JSON available as target.extra"},
-            {"name": "ATTACK_WORKERS / --workers", "purpose": "bounded parallelism"},
             {"name": "ATTACK_TIMEOUT / --timeout", "purpose": "per-request timeout"},
             {"name": "FLAG_REGEX", "purpose": "override flag extraction regex"},
         ],
         "context_fields": [
-            {"name": "target.host / port / service", "purpose": "resolved victim endpoint"},
-            {"name": "target.team_id / team_name", "purpose": "victim identity from attack.json"},
-            {"name": "target.flag_id", "purpose": "current flattened attack-info value"},
-            {"name": "target.flag_id_path", "purpose": "raw round/store path for that value"},
-            {"name": "target.attack_round / flag_store", "purpose": "ECSC round and flag-store hints"},
-            {"name": "target.raw_flag_ids", "purpose": "unmodified nested IDs for the team"},
-            {"name": "target.requested_round", "purpose": "selected round or None for all valid rounds"},
-            {"name": "target.current_round", "purpose": "current game round"},
-            {"name": "target.current_round_start / current_round_until", "purpose": "round timing from raw attack.json"},
-            {"name": "target.flag_regex", "purpose": "competition-provided flag pattern"},
-            {"name": "target.extra / timeout", "purpose": "custom JSON and per-target timeout"},
+            {"name": "host", "purpose": "team.ip from ecsc2026ad"},
+            {"name": "flag_id", "purpose": "flattened current attack-info value"},
+            {"name": "port", "purpose": "captured destination port"},
+            {"name": "timeout", "purpose": "connection/request timeout"},
+            {"name": "ATTACK_INFO_TOKENS", "purpose": "captured values replaced with flag_id"},
         ],
     }
